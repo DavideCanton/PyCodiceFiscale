@@ -3,38 +3,46 @@ __author__ = 'davide'
 import sqlite3
 import string
 import sys
+import itertools as it
+import operator
+from functools import partial
 from datetime import date
 
 MESI = "ABCDEHLMPRST"
-DISPARI = {"0": 1, "1": 0, "2": 5, "3": 7, "4": 9, "5": 13,
-           "6": 15, "7": 17, "8": 19, "9": 21, "A": 1, "B": 0,
-           "C": 5, "D": 7, "E": 9, "F": 13, "G": 15, "H": 17,
-           "I": 19, "J": 21, "K": 2, "L": 4, "M": 18, "N": 20,
-           "O": 11, "P": 3, "Q": 6, "R": 8, "S": 12, "T": 14,
-           "U": 16, "V": 10, "W": 22, "X": 25, "Y": 24, "Z": 23}
-VOCALI = set("AEIOU")
-CIFRE = set(string.digits)
+DISPARI = [1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18,
+           20, 11, 3, 6, 8, 12, 14, 16, 10, 22, 25, 24, 23]
+ORD_0 = ord("0")
+ORD_A = ord("A")
 
+vocale_pred = partial(operator.contains, set("AEIOU"))
+cifre_pred = partial(operator.contains, string.digits)
 
 def pari(char):
-    if char in CIFRE:
-        return ord(char) - ord("0")
-    return ord(char) - ord("A")
+    if cifre_pred(char):
+        return ord(char) - ORD_0
+    return ord(char) - ORD_A
+
+
+def dispari(char):
+    if cifre_pred(char):
+        return DISPARI[ord(char) - ORD_0]
+    return DISPARI[ord(char) - ORD_A]
 
 
 def calcola_ultimo_carattere(resto):
-    return chr(ord("A") + resto)
+    return chr(ORD_A + resto)
+
+
+def partition(pred, iterable):
+    t1, t2 = it.tee(iterable)
+    return it.filterfalse(pred, t1), filter(pred, t2)
 
 
 def codifica_nome(nome, is_cognome=True):
     nome = nome.upper().replace(" ", "")
 
-    consonanti, vocali = [], []
-    for carattere in nome:
-        if carattere in VOCALI:
-            vocali.append(carattere)
-        else:
-            consonanti.append(carattere)
+    consonanti, vocali = partition(vocale_pred, nome)
+    consonanti, vocali = list(consonanti), list(vocali)
 
     if not is_cognome and len(consonanti) > 3:
         del consonanti[1]
@@ -51,26 +59,20 @@ def codifica_data(data, sesso):
 
 
 def codifica_comune(nome_comune):
-    nome_comune = nome_comune.upper()
-    conn = sqlite3.connect("comuni.db")
-    result_set = conn.execute("select code from comuni where name = ?", [nome_comune])
-    result = result_set.fetchone()
-    if result is None:
-        raise ValueError("Comune non trovato!")
-    else:
+    try:
+        nome_comune = nome_comune.upper()
+        conn = sqlite3.connect("comuni.db")
+        result_set = conn.execute("select code from comuni where name = ?", [nome_comune])
+        result = result_set.fetchone()
         return result[0]
+    except TypeError: # result is None
+        raise ValueError("Comune non trovato!")
 
 
 def calcola_codice_controllo(code):
-    accumulatore = 0
-    dispari = True
-    for carattere in code:
-        if dispari:
-            accumulatore += DISPARI[carattere]
-        else:
-            accumulatore += pari(carattere)
-        dispari = not dispari
-    return calcola_ultimo_carattere(accumulatore % 26)
+    acc_d = sum(dispari(x) for x in code[::2])
+    acc_p = sum(pari(x) for x in code[1::2])
+    return calcola_ultimo_carattere((acc_d + acc_p) % 26)
 
 
 def calcola_cf(cognome, nome, data, sesso, comune):
