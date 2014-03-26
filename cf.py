@@ -15,16 +15,16 @@ ORD_0 = ord("0")
 ORD_A = ord("A")
 
 vocale_pred = partial(operator.contains, set("AEIOU"))
-cifre_pred = partial(operator.contains, string.digits)
+
 
 def pari(char):
-    if cifre_pred(char):
+    if char.isdigit():
         return ord(char) - ORD_0
     return ord(char) - ORD_A
 
 
 def dispari(char):
-    if cifre_pred(char):
+    if char.isdigit():
         return DISPARI[ord(char) - ORD_0]
     return DISPARI[ord(char) - ORD_A]
 
@@ -65,7 +65,7 @@ def codifica_comune(nome_comune):
         result_set = conn.execute("select code from comuni where name = ?", [nome_comune])
         result = result_set.fetchone()
         return result[0]
-    except TypeError: # result is None
+    except TypeError:  # result is None
         raise ValueError("Comune non trovato!")
 
 
@@ -84,6 +84,8 @@ def calcola_cf(cognome, nome, data, sesso, comune):
 
 
 def parse_input():
+    cognome, nome, sesso, data, comune = "" * 5
+
     if 1 < len(sys.argv) < 6:
         exit("Numero di parametri insufficiente")
     elif len(sys.argv) == 1:
@@ -114,6 +116,7 @@ def main():
                      dati[1].capitalize(),
                      dati[0].capitalize()))
     print(calcola_cf(*dati))
+
 
 if __name__ == "__main__":
     main()
