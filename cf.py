@@ -3,7 +3,6 @@ __author__ = 'davide'
 import sqlite3
 import string
 import sys
-import itertools as it
 import operator
 from functools import partial
 from datetime import date
@@ -20,13 +19,15 @@ vocale_pred = partial(operator.contains, set("AEIOU"))
 def pari(char):
     if char.isdigit():
         return ord(char) - ORD_0
-    return ord(char) - ORD_A
+    else:
+        return ord(char) - ORD_A
 
 
 def dispari(char):
     if char.isdigit():
         return DISPARI[ord(char) - ORD_0]
-    return DISPARI[ord(char) - ORD_A]
+    else:
+        return DISPARI[ord(char) - ORD_A]
 
 
 def calcola_ultimo_carattere(resto):
@@ -34,15 +35,16 @@ def calcola_ultimo_carattere(resto):
 
 
 def partition(pred, iterable):
-    t1, t2 = it.tee(iterable)
-    return it.filterfalse(pred, t1), filter(pred, t2)
+    partitions = [],[]
+    for c in iterable:
+        partitions[int(pred(c))].append(c)
+    return partitions            
 
 
 def codifica_nome(nome, is_cognome=True):
     nome = nome.upper().replace(" ", "")
 
-    consonanti, vocali = partition(vocale_pred, nome)
-    consonanti, vocali = list(consonanti), list(vocali)
+    consonanti, vocali = partition(vocale_pred, nome)    
 
     if not is_cognome and len(consonanti) > 3:
         del consonanti[1]
@@ -84,8 +86,6 @@ def calcola_cf(cognome, nome, data, sesso, comune):
 
 
 def parse_input():
-    cognome, nome, sesso, data, comune = "" * 5
-
     if 1 < len(sys.argv) < 6:
         exit("Numero di parametri insufficiente")
     elif len(sys.argv) == 1:
@@ -106,7 +106,7 @@ def parse_input():
     except ValueError:
         exit("Data non valida!")
 
-    return [cognome, nome, data, sesso, comune]
+    return cognome, nome, data, sesso, comune
 
 
 def main():
