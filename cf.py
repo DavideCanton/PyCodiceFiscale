@@ -3,6 +3,7 @@ __author__ = 'davide'
 import sqlite3
 import string
 import sys
+import itertools as it
 import operator
 from functools import partial
 from datetime import date
@@ -13,21 +14,15 @@ DISPARI = [1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18,
 ORD_0 = ord("0")
 ORD_A = ord("A")
 
-vocale_pred = partial(operator.contains, set("AEIOU"))
+vocale_pred = partial(operator.contains, set("AEIOUÀÈÉÌÒÙ"))
 
 
 def pari(char):
-    if char.isdigit():
-        return ord(char) - ORD_0
-    else:
-        return ord(char) - ORD_A
+    return ord(char) - (ORD_0 if char.isdigit() else ORD_A)
 
 
 def dispari(char):
-    if char.isdigit():
-        return DISPARI[ord(char) - ORD_0]
-    else:
-        return DISPARI[ord(char) - ORD_A]
+    return DISPARI[ord(char) - (ORD_0 if char.isdigit() else ORD_A)]
 
 
 def calcola_ultimo_carattere(resto):
@@ -35,16 +30,16 @@ def calcola_ultimo_carattere(resto):
 
 
 def partition(pred, iterable):
-    partitions = [],[]
-    for c in iterable:
-        partitions[int(pred(c))].append(c)
-    return partitions            
+    partitions = [], []
+    for element in iterable:
+        partitions[int(pred(element))].append(element)
+    return partitions
 
 
 def codifica_nome(nome, is_cognome=True):
     nome = nome.upper().replace(" ", "")
 
-    consonanti, vocali = partition(vocale_pred, nome)    
+    consonanti, vocali = partition(vocale_pred, nome)
 
     if not is_cognome and len(consonanti) > 3:
         del consonanti[1]
