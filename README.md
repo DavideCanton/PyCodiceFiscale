@@ -1,12 +1,16 @@
 PyCodiceFiscale
-===============
+=
 
-Calcolo del codice fiscale in Python 3.x.
+Tax code calculation in Python 3.x.
 
-Il programma consente di calcolare il codice fiscale in maniera interattiva (ovvero inserendo i dati da riga di comando) oppure passandoli come parametri alla command line invocando il comando.
+The program allows you to calculate the tax code interactively (that is, by entering the data from the command line) or by passing it as parameters to the command line by invoking the command.
 
-La sintassi è python3 cf.py nome cognome sesso data comune
+The syntax is 
 
-sesso dev'essere una delle seguenti alternative: m/M se si vuole indicare il sesso maschile, f/F se si vuole indicare il sesso femminile.
+`$ python cf.py <<first>> <<name>> <<last name>> <<sex>> <<comune>> <<date>>`
 
-data dev'essere nella forma gg/mm/aaaa
+`gender` must be one of the following alternatives: 
+- `m/M` if you want to indicate male gender;
+- `f/F` if you want to indicate female gender.
+
+`date` must be in the form `dd/mm/yyyy`.

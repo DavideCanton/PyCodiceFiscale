@@ -1,116 +1,206 @@
-__author__ = 'davide'
+"""Tax code calculation in Python 3.x.
 
-import sqlite3
-import string
-import sys
-import itertools as it
+The program allows you to calculate the tax code interactively
+(that is, by entering the data from the command line) or by passing it
+as parameters to the command line by invoking the command.
+"""
+from __future__ import annotations
+from argparse import ArgumentParser
+from dataclasses import dataclass
+from enum import Enum
 import operator
+import sqlite3
+from datetime import date, datetime
 from functools import partial
-from datetime import date
+from typing import Callable, Iterable
 
-MESI = "ABCDEHLMPRST"
-DISPARI = [1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18,
-           20, 11, 3, 6, 8, 12, 14, 16, 10, 22, 25, 24, 23]
-ORD_0 = ord("0")
-ORD_A = ord("A")
+__author__ = "DavideCanton"
 
-vocale_pred = partial(operator.contains, set("AEIOUÀÈÉÌÒÙ"))
+MONTHS = "ABCDEHLMPRST"
+"""Months string defining the month character for each month.
 
-
-def pari(char):
-    return ord(char) - (ORD_0 if char.isdigit() else ORD_A)
-
-
-def dispari(char):
-    return DISPARI[ord(char) - (ORD_0 if char.isdigit() else ORD_A)]
-
-
-def calcola_ultimo_carattere(resto):
-    return chr(ORD_A + resto)
+Uses zero-based month indexing, so the character corresponding to January
+is stored in position 0.
+"""
+# fmt: off
+ODD_VALUES = [
+    1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18,
+    20, 11, 3, 6, 8, 12, 14, 16, 10, 22, 25, 24, 23
+]
+"""Values required to compute the checksum for characters in odd
+positions."""
+# fmt: on
 
 
-def partition(pred, iterable):
+class Sex(str, Enum):
+    """Enum defining sex values."""
+
+    M = "M"
+    """Male"""
+    F = "F"
+    """Female"""
+
+
+@dataclass
+class Input:
+    """Input values class."""
+
+    name: str
+    """The name."""
+    surname: str
+    """The surname."""
+    sex: Sex
+    """The sex."""
+    dob: date
+    """The date of birth."""
+    comune: str
+    """The comune of birth."""
+
+    @classmethod
+    def Make(cls, name: str, surname: str, sex: str, dob: str, comune: str) -> Input:
+        """Creates an ``Input`` value from the arguments."""
+        sex_enum = Sex(sex.upper())
+        dob_d = datetime.strptime(dob, "%d/%m/%Y").date()
+        return Input(name, surname, sex_enum, dob_d, comune)
+
+
+is_vowel: Callable[[str], bool] = partial(operator.contains, set("AEIOUÀÈÉÌÒÙ"))
+"""Returns True if the character is a vowel."""
+
+
+def even_char(char: str) -> int:
+    """Computes the control value for characters in even position."""
+    return ord(char) - (ord("0") if char.isdigit() else ord("A"))
+
+
+def odd_char(char: str) -> int:
+    """Computes the control value for characters in odd position."""
+    return ODD_VALUES[ord(char) - (ord("0") if char.isdigit() else ord("A"))]
+
+
+def partition(
+    pred: Callable[[str], bool], iterable: Iterable[str]
+) -> tuple[list[str], list[str]]:
+    """Splits the iterable into two lists containing respectively:
+    - the elements for which the predicate is False;
+    - the elements for which the predicate is True.
+    """
     partitions = [], []
     for element in iterable:
         partitions[int(pred(element))].append(element)
     return partitions
 
 
-def codifica_nome(nome, is_cognome=True):
-    nome = nome.upper().replace(" ", "")
+def encode_name(name: str, is_surname: bool) -> str:
+    """Encodes name and surname in tax code format.
 
-    consonanti, vocali = partition(vocale_pred, nome)
+    If ``is_surname`` is False, removes the second consonant
+    if there are more than 3 consonants in the name.
+    """
+    name = name.upper().replace(" ", "")
 
-    if not is_cognome and len(consonanti) > 3:
-        del consonanti[1]
+    consonants, vowels = partition(is_vowel, name)
 
-    nome = "".join(consonanti + vocali)[:3]
-    return nome.ljust(3, "X")
+    if not is_surname and len(consonants) > 3:
+        del consonants[1]
 
-
-def codifica_data(data, sesso):
-    offset = 40 if sesso in "fF" else 0
-    return "{:>02}{}{:>02}".format(data.year % 100,
-                                   MESI[data.month - 1],
-                                   data.day + offset)
+    name = "".join(consonants + vowels)[:3]
+    return name.ljust(3, "X")
 
 
-def codifica_comune(nome_comune):
+def encode_date(dob: date, sex: Sex) -> str:
+    """Encodes the date of birth."""
+    year = dob.year % 100
+    month = MONTHS[dob.month - 1]
+    offset = 40 if sex is Sex.F else 0
+    day = dob.day + offset
+    return f"{year:>02}{month}{day:>02}"
+
+
+def encode_comune(comune: str) -> str:
+    """Retrieves the comune's code from the database."""
     try:
-        nome_comune = nome_comune.upper()
         conn = sqlite3.connect("comuni.db")
-        result_set = conn.execute("select code from comuni where name = ?", [nome_comune])
+        result_set = conn.execute(
+            "select code from comuni where upper(name) = ?", [comune.upper()]
+        )
         result = result_set.fetchone()
         return result[0]
     except TypeError:  # result is None
-        raise ValueError("Comune non trovato!")
+        raise ValueError(f"Comune with name {comune} not found!")
 
 
-def calcola_codice_controllo(code):
-    acc_d = sum(dispari(x) for x in code[::2])
-    acc_p = sum(pari(x) for x in code[1::2])
-    return calcola_ultimo_carattere((acc_d + acc_p) % 26)
+def compute_control_code(tax_code: str) -> str:
+    """Computes the control code."""
+    acc_d = sum(odd_char(x) for x in tax_code[::2])
+    acc_p = sum(even_char(x) for x in tax_code[1::2])
+    rem = (acc_d + acc_p) % 26
+    return chr(ord("A") + rem)
 
 
-def calcola_cf(cognome, nome, data, sesso, comune):
-    codice = "{}{}{}{}".format(codifica_nome(cognome),
-                               codifica_nome(nome, is_cognome=False),
-                               codifica_data(data, sesso),
-                               codifica_comune(comune))
-    return "".join([codice, calcola_codice_controllo(codice)])
+def compute_tax_code(data: Input) -> str:
+    """Computes the tax code from the input."""
+    tax_code = "".join(
+        [
+            encode_name(data.surname, is_surname=True),
+            encode_name(data.name, is_surname=False),
+            encode_date(data.dob, data.sex),
+            encode_comune(data.comune),
+        ]
+    )
+    return tax_code + compute_control_code(tax_code)
 
 
-def parse_input():
-    if 1 < len(sys.argv) < 6:
-        exit("Numero di parametri insufficiente")
-    elif len(sys.argv) == 1:
-        nome = input("Nome>")
-        cognome = input("Cognome>")
-        sesso = input("Sesso (M/F)>")
-        data = input("Data (gg/mm/aaaa)>")
-        comune = input("Comune>")
-    else:
-        nome, cognome, sesso, data, comune = sys.argv[1:]
+def make_parser() -> ArgumentParser:
+    """Creates the argument parser."""
+    parser = ArgumentParser(description="Tax code calculation in Python")
 
-    if sesso not in "mMfF" or len(sesso) != 1:
-        exit("Sesso non valido!")
+    subparsers = parser.add_subparsers(help="Subcommands")
+    parser_args = subparsers.add_parser("args", help="Reads inputs from args")
+    parser_args.add_argument("name", help="The name.", type=str)
+    parser_args.add_argument("surname", help="The surname.", type=str)
+    parser_args.add_argument("sex", help="The sex.", type=str, choices=list("fFmM"))
+    parser_args.add_argument(
+        "dob", help="The date of birth in DD/MM/YYYY format.", type=str
+    )
+    parser_args.add_argument("comune", help="The comune.", type=str)
+    parser_args.set_defaults(func=read_args)
 
-    try:
-        giorno, mese, anno = map(int, data.split("/"))
-        data = date(anno, mese, giorno)
-    except ValueError:
-        exit("Data non valida!")
+    parser_input = subparsers.add_parser("input", help="Reads inputs from stdin")
+    parser_input.set_defaults(func=read_input)
 
-    return cognome, nome, data, sesso, comune
+    return parser
+
+
+def read_input(_args) -> Input:
+    """Reads the input from stdin."""
+    name = input("Nome> ")
+    surname = input("Cognome> ")
+    sex_s = input("Sesso (M/F)> ")
+    dob_s = input("Data (gg/mm/aaaa)> ")
+    comune = input("Comune> ")
+    return Input.Make(name, surname, sex_s, dob_s, comune)
+
+
+def read_args(args) -> Input:
+    """Reads the input from command line arguments."""
+    return Input.Make(args.name, args.surname, args.sex, args.dob, args.comune)
 
 
 def main():
-    dati = parse_input()
-    fmt = "Car{} {} {}, il tuo codice fiscale e'..."
-    print(fmt.format("a" if dati[3] in "fF" else "o",
-                     dati[1].capitalize(),
-                     dati[0].capitalize()))
-    print(calcola_cf(*dati))
+    """Main routine."""
+    parser = make_parser()
+    args = parser.parse_args()
+    input_data: Input = args.func(args)
+    fmt = "Car{} {} {}, il tuo codice fiscale è..."
+    print(
+        fmt.format(
+            "a" if input_data.sex is Sex.F else "o",
+            input_data.name.capitalize(),
+            input_data.surname.capitalize(),
+        )
+    )
+    print(compute_tax_code(input_data))
 
 
 if __name__ == "__main__":
